@@ -5,12 +5,19 @@ import requests
 import json
 import re
 import tweepy
-import twitter_info # still need this in the same directory, filled out
+# import twitter_info # still need this in the same directory, filled out
 
-consumer_key = twitter_info.consumer_key
-consumer_secret = twitter_info.consumer_secret
-access_token = twitter_info.access_token
-access_token_secret = twitter_info.access_token_secret
+# consumer_key = twitter_info.consumer_key
+# consumer_secret = twitter_info.consumer_secret
+# access_token = twitter_info.access_token
+# access_token_secret = twitter_info.access_token_secret
+# auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+# auth.set_access_token(access_token, access_token_secret)
+
+consumer_key = "YzuoCgQZJMumzM3MyjxHUpXDG"
+consumer_secret = "nKwhmDp4Xc9px6YbiMngnpNeSPA9dqE4pQ3XJXPnnBiqIOa0oc"
+access_token = "154713903-Dml4mqXybHfPIDLeCHfLCoNuPn8oerD9To4pxDdw"
+access_token_secret = "pUdcsCYuvpo3pDmqUa7HVkHtZTB9Xhjq2cOg5YcmD2QRy"
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
 
@@ -27,37 +34,59 @@ try:
 except:
     CACHE_DICTION = {}
 
-# uprint defintion 
-import sys
-def uprint(*objects, sep=' ', end='\n', file=sys.stdout):
-    enc = file.encoding
-    if enc == 'UTF-8':
-        print(*objects, sep=sep, end=end, file=file)
-    else:
-        f = lambda obj: str(obj).encode(enc, errors='backslashreplace').decode(enc)
-        print(*map(f, objects), sep=sep, end=end, file=file)
-
-# [PART 1]
+## [PART 1]
 
 # Here, define a function called get_tweets that searches for all tweets referring to or by "umsi"
 # Your function must cache data it retrieves and rely on a cache file!
 
 
 def get_tweets():
-    if "umsi" in CACHE_DICTION:
-        uprint("Using Cache")
-        uprint("***********************")
-        results = CACHE_DICTION['umsi']
+    if 'umsi' in CACHE_DICTION:
+        print ('using cached data')
+        twitter_results = CACHE_DICTION['umsi']
     else:
-        uprint("retrieving from Twitter")
-        uprint("***********************")
-        results= api.user_timeline('umsi')
-        CACHE_DICTION["umsi"] = results
-        dumped_json_cache = json.dumps(CACHE_DICTION) + '\n'
-        fw = open(CACHE_FNAME,'w')
-        fw.write(dumped_json_cache)
-        fw.close()
-    return results
+        print ('getting data from internet')
+        twitter_results= api.user_timeline('umsi')
+
+        CACHE_DICTION['umsi'] = twitter_results
+
+        f= open(CACHE_FNAME, 'w')
+        f.write(json.dumps(CACHE_DICTION))
+        f.close()
+    return twitter_results
+
+
+conn= sqlite3.connect('tweets.sqlite')
+cur= conn.cursor()
+
+cur.execute('DROP TABLE IF EXISTS Tweets')
+cur.execute('CREATE TABLE Tweets (tweet_id TEXT, author TEXT, time_posted TIMESTAMP, tweet_text TEXT, retweets NUMBER)')
+
+umsi_tweets = get_tweets()
+
+
+for tw in umsi_tweets:
+    tup= tw["id"], tw["user"]["screen_name"], tw["created_at"], tw["text"], tw["retweet_count"]
+    cur.execute('INSERT INTO Tweets (tweet_id, author, time_posted, tweet_text, retweets) VALUES (?, ?, ?, ?, ?)',tup)
+
+conn.commit()
+
+
+cur.execute("SELECT time_posted, tweet_text FROM Tweets")
+all_res = cur.fetchall()
+for t in all_res:
+    print(t[0] + " - " + t[1]+"\n")
+
+cur.execute("SELECT author FROM Tweets WHERE retweets > 2")
+more_than_2_rts= cur.fetchall()
+print ("more_than_2_rts -  %s " % set(more_than_2_rts))
+
+cur.close()
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
+##YOUR CODE HERE
+
 
 
 ## [PART 2]
@@ -72,30 +101,18 @@ def get_tweets():
 # Below we have provided interim outline suggestions for what to do, sequentially, in comments.
 
 # 1 - Make a connection to a new database tweets.sqlite, and create a variable to hold the database cursor.
-connection = sqlite3.connect("tweets.sqlite")
-cur = connection.cursor() 
-
 
 
 # 2 - Write code to drop the Tweets table if it exists, and create the table (so you can run the program over and over), with the correct (4) column names and appropriate types for each.
 # HINT: Remember that the time_posted column should be the TIMESTAMP data type!
-cur.execute("DROP TABLE IF EXISTS Tweets")
-cur.execute('''
-CREATE TABLE Tweets (tweet_id TEXT, author TEXT, time_posted TIMESTAMP, tweet_text TEXT, retweets NUMBER)''')
-# tweet_id = "id", author = 'user''screen_name', time_posted = 'created_at', tweet_text = 'text', retweets = 'retweet_count'
-# 3 - Invoke the function you defined above to get a list that represents a bunch of tweets from the UMSI timeline. Save those tweets in a variable called umsi_tweets.
-umsi_tweets = get_tweets()
 
+# 3 - Invoke the function you defined above to get a list that represents a bunch of tweets from the UMSI timeline. Save those tweets in a variable called umsi_tweets.
 
 
 # 4 - Use a for loop, the cursor you defined above to execute INSERT statements, that insert the data from each of the tweets in umsi_tweets into the correct columns in each row of the Tweets database table.
-for tweet in umsi_tweets:
-    tweet_tup = tweet["id"],tweet['user']["screen_name"],tweet["created_at"],tweet['text'],tweet['retweet_count']
-    cur.execute('''INSERT INTO Tweets (tweet_id, author, time_posted, tweet_text, retweets)
-                VALUES (?,?,?,?,?)''',tweet_tup)
+
 
 #  5- Use the database connection to commit the changes to the database
-connection.commit()
 
 # You can check out whether it worked in the SQLite browser! (And with the tests.)
 
@@ -106,19 +123,11 @@ connection.commit()
     # Mon Oct 09 15:45:45 +0000 2017 - RT @MikeRothCom: Beautiful morning at @UMich - It’s easy to forget to
     # take in the view while running from place to place @umichDLHS  @umich…
 # Include the blank line between each tweet.
-cur.execute("SELECT time_posted, tweet_text FROM Tweets")
-res = cur.fetchall()
-for x in res:
-    uprint(x[0] + " - " + x[1]+"\n")
+
 
 # Select the author of all of the tweets (the full rows/tuples of information) that have been retweeted MORE
 # than 2 times, and fetch them into the variable more_than_2_rts.
 # Print the results
-cur.execute("SELECT author FROM Tweets WHERE retweets > 2")
-retweeted = cur.fetchall()
-uprint("More than 2 retweets -  %s " % set(retweeted))
-
-cur.close()
 
 
 
